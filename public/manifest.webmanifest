@@ -1,0 +1,17 @@
+{
+  "name": "Ритмо — твой мягкий темп",
+  "short_name": "Ритмо",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f4ed",
+  "theme_color": "#f7f4ed",
+  "description": "Мягкие ритуалы, фокус и награды без давления. Данные хранятся локально.",
+  "icons": [
+    {
+      "src": "https://files.manuscdn.com/user_upload_by_module/session_file/310519663889521944/kOXwbzRdNUJizwJs.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
