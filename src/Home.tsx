@@ -58,6 +58,7 @@ type Mode = "школа" | "учёба" | "работа" | "жизнь";
 type DriftKind = "мысль" | "слишком много" | "унесло" | "тяжело" | "пусто";
 type ReflectionAnswer = "да" | "чуть" | "нет";
 type AudioScene = "лоу-фай" | "эмбиент" | "пианино" | "ночной джаз" | "дождь" | "белый шум";
+type SectionId = "today" | "rituals" | "focus" | "rhythm";
 
 type Ritual = {
   id: string;
@@ -191,6 +192,13 @@ const modeOptions: Array<[Mode, string]> = [
   ["учёба", "Пары, дедлайны, сессия"],
   ["работа", "Проекты, встречи, почта"],
   ["жизнь", "Дом, здоровье, личный ритм"],
+];
+
+const navigationItems: Array<{ id: SectionId; label: string; Icon: typeof Sun }> = [
+  { id: "today", label: "Сегодня", Icon: Sun },
+  { id: "rituals", label: "Ритуалы", Icon: ListChecks },
+  { id: "focus", label: "Фокус", Icon: Clock3 },
+  { id: "rhythm", label: "Мой ритм", Icon: Waves },
 ];
 
 const templateRituals: Record<Mode, Array<Omit<Ritual, "id" | "done">>> = {
@@ -337,12 +345,14 @@ export default function Home() {
   const [aiSteps, setAiSteps] = useState<string[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [deferredInstall, setDeferredInstall] = useState<BeforeInstallPromptEvent | null>(null);
+  const [activeSection, setActiveSection] = useState<SectionId>("today");
 
   const uploadRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioIntervalRef = useRef<number | null>(null);
   const audioMasterRef = useRef<GainNode | null>(null);
   const audioFadeTimeoutRef = useRef<number | null>(null);
+  const focusNavigationPinnedRef = useRef(false);
 
   const selected = rituals.find((item) => item.id === selectedId) ?? rituals.find((item) => !item.done) ?? rituals[0];
   const completedCount = rituals.filter((item) => item.done).length;
@@ -509,8 +519,35 @@ export default function Home() {
     void audioContextRef.current?.close();
   }, []);
 
+  useEffect(() => {
+    const sectionIds: SectionId[] = ["today", "rituals", "rhythm"];
+    if (window.matchMedia("(max-width: 730px)").matches) sectionIds.splice(2, 0, "focus");
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((first, second) => Math.abs(first.boundingClientRect.top - window.innerHeight * 0.26) - Math.abs(second.boundingClientRect.top - window.innerHeight * 0.26));
+      const next = visible[0]?.target.id as SectionId | undefined;
+      if (!next) return;
+      if (focusNavigationPinnedRef.current && next === "today") return;
+      if (next !== "today") focusNavigationPinnedRef.current = false;
+      setActiveSection(next);
+    }, { rootMargin: "-18% 0px -64% 0px", threshold: [0.08, 0.28, 0.6] });
+    sectionIds.forEach((id) => {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    });
+    return () => observer.disconnect();
+  }, []);
+
   function updateRitual(id: string, patch: Partial<Ritual>) {
     setRituals((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  function navigateToSection(event: React.MouseEvent<HTMLAnchorElement>, section: SectionId) {
+    event.preventDefault();
+    focusNavigationPinnedRef.current = section === "focus";
+    setActiveSection(section);
+    document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function selectFocusLength(length: number) {
@@ -938,15 +975,12 @@ export default function Home() {
   return (
     <main className={`ritmo-shell visual-${settings.visualMode}`}>
       <aside className="side-rail" aria-label="Основная навигация">
-        <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Ритмо: к началу">
+        <button className="brand" onClick={() => { focusNavigationPinnedRef.current = false; setActiveSection("today"); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Ритмо: к началу">
           <img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663889521944/kOXwbzRdNUJizwJs.png" alt="" className="brand-mark" />
           <span className="brand-wordmark">рит<span>м</span>о<svg viewBox="0 0 55 12" fill="none" aria-hidden="true"><path d="M1 8C9 1 17 11 27 6C37 1 43 10 54 3" /></svg></span>
         </button>
         <nav className="side-nav">
-          <a className="nav-link is-current" href="#today"><Sun size={19} /> Сегодня</a>
-          <a className="nav-link" href="#rituals"><ListChecks size={19} /> Ритуалы</a>
-          <a className="nav-link" href="#focus"><Clock3 size={19} /> Фокус</a>
-          <a className="nav-link" href="#rhythm"><Waves size={19} /> Мой ритм</a>
+          {navigationItems.map(({ id, label, Icon }) => <a className={activeSection === id ? "nav-link is-current" : "nav-link"} data-section={id} href={`#${id}`} onClick={(event) => navigateToSection(event, id)} aria-current={activeSection === id ? "page" : undefined} key={id}><Icon size={19} /> {label}</a>)}
         </nav>
         <section className="rail-card energy-card">
           <div className="eyebrow"><Heart size={14} /> Я здесь</div>
@@ -1018,7 +1052,7 @@ export default function Home() {
 
       <section className="rhythm-section" id="rhythm"><div className="section-topline"><div><span className="section-index">04</span><h2>Мой ритм</h2></div><span className="progress-caption">только локальные наблюдения</span></div><div className="rhythm-grid"><article className="rhythm-note"><Repeat2 size={18} /><strong>{reflection.returnCount}</strong><span>возвратов к нити</span><p>{weeklyMessage}</p></article><article className="rhythm-note"><Heart size={18} /><strong>{reflection.careActs}</strong><span>бережных выборов</span><p>Сюда входят low-energy шаги и честные паузы.</p></article><article className="rhythm-note"><Eye size={18} /><strong>{returnEase}/{reflection.answers.length || 0}</strong><span>сессий стало легче закрыть</span><div className="reflection-actions"><span>Стало ли проще вернуться?</span><div><button onClick={() => answerReflection("да")}>да</button><button onClick={() => answerReflection("чуть")}>чуть</button><button onClick={() => answerReflection("нет")}>нет</button></div></div></article></div><section className="helpful-card"><div><div className="eyebrow"><PenLine size={14} /> что мне помогает</div><p>Собери свои рабочие опоры. Это не рекомендации извне — это твой собственный опыт.</p></div><form onSubmit={addHelpfulNote}><input name="helpful" placeholder="Например: начинать с воды и открытого окна" maxLength={140} /><button type="submit"><Plus size={15} /> сохранить</button></form>{reflection.helpfulNotes.length > 0 && <div className="helpful-list">{reflection.helpfulNotes.slice(-3).reverse().map((note, index) => <span key={`${note}-${index}`}>{note}</span>)}</div>}</section></section>
 
-      <nav className="mobile-nav" aria-label="Навигация на телефоне"><a href="#today"><Sun size={18} />Сегодня</a><a href="#rituals"><ListChecks size={18} />Ритуалы</a><a href="#focus"><Clock3 size={18} />Фокус</a><a href="#rhythm"><Waves size={18} />Ритм</a></nav>
+      <nav className="mobile-nav" aria-label="Навигация на телефоне">{navigationItems.map(({ id, label, Icon }) => <a href={`#${id}`} className={activeSection === id ? "is-current" : ""} onClick={(event) => navigateToSection(event, id)} aria-current={activeSection === id ? "page" : undefined} key={id}><Icon size={18} />{id === "rhythm" ? "Ритм" : label}</a>)}</nav>
 
       {showOnboarding && <Dialog onClose={() => { setSettings((current) => ({ ...current, onboardingDone: true })); setShowOnboarding(false); }} className="onboarding-dialog"><button className="close-modal" onClick={() => { setSettings((current) => ({ ...current, onboardingDone: true })); setShowOnboarding(false); }} aria-label="Закрыть"><X size={19} /></button><div className="paper-tag tag-coral"><Sparkles size={14} /> Ритмо рядом</div><h2>Не нужно строить идеальную систему.</h2><p>Здесь есть только ритуал, один видимый шаг и нить, к которой можно вернуться после любого отвлечения.</p><div className="onboarding-steps"><span><b>1</b> Выбери крошечный ритуал.</span><span><b>2</b> Назови, что станет видно через 90 секунд.</span><span><b>3</b> Если унесёт — сохрани нить и вернись позже.</span></div><button className="primary-action" onClick={() => { setSettings((current) => ({ ...current, onboardingDone: true })); setShowOnboarding(false); setNotice("Достаточно одного следующего шага. Остальное подождёт."); }}>выбрать первый шаг <ChevronRight size={17} /></button></Dialog>}
 
